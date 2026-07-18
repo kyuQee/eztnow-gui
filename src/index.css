@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Base resets or custom scrollbar styling if needed */
+body {
+  font-family: var(--font-sans);
+  background-color: #F5F6F8;
+  color: #111111;
+  overflow-x: hidden;
+}
+
+/* Elegant scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(17, 17, 17, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(17, 17, 17, 0.3);
+}
+
+
+
+/* Custom dark scrollbar for node list */
+.custom-scroll-dark::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scroll-dark::-webkit-scrollbar-track {
+  background: #0A0A0A;
+}
+.custom-scroll-dark::-webkit-scrollbar-thumb {
+  background: #2A2A2A;
+  border-radius: 0px;
+}
+.custom-scroll-dark::-webkit-scrollbar-thumb:hover {
+  background: #3A3A3A;
+}
