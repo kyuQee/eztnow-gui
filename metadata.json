@@ -1,6 +1,0 @@
-{
-  "name": "MAWMAW",
-  "description": "Real-Time Event Processing Engine Monitoring Dashboard",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
