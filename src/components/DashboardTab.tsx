@@ -17,10 +17,9 @@ const DashboardTab: React.FC = () => {
   const { sensorNodes, sensorHistory, metrics } = state;
   const [selectedNodeId, setSelectedNodeId] = useState<string>(sensorNodes[0]?.id || '');
 
-  // Get selected node's history
   const selectedHistory = sensorHistory[selectedNodeId] || [];
+  const selectedNode = sensorNodes.find(n => n.id === selectedNodeId);
 
-  // Chart margin
   const chartMargin = { top: 10, right: 20, left: 0, bottom: 0 };
 
   return (
@@ -31,11 +30,21 @@ const DashboardTab: React.FC = () => {
         <div className="flex-1 bg-white/80 backdrop-blur-md border border-neutral-200/60 rounded-xl p-4 shadow-xs min-h-0">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xs font-semibold tracking-wider text-neutral-800 uppercase flex items-center gap-1.5">
-              <Thermometer className="w-4 h-4 text-neutral-600" /> Temperature (°C) – {sensorNodes.find(n => n.id === selectedNodeId)?.name || 'Unknown'}
+              <Thermometer className="w-4 h-4 text-neutral-600" /> Temperature (°C) – {selectedNode?.name || 'Unknown'}
             </h3>
             <span className="text-[10px] text-neutral-400">Real-time</span>
           </div>
-          <div className="h-[calc(100%-2rem)] w-full">
+          <div className="h-[calc(100%-2rem)] w-full relative">
+            {/* Temperature stat card */}
+            {selectedNode && (
+              <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md border border-neutral-200/60 rounded-lg px-3 py-2 shadow-md flex items-center gap-1.5 z-10">
+                <Thermometer className="w-3.5 h-3.5 text-[#C7F000]" />
+                <span className="font-mono text-sm font-bold text-neutral-800">
+                  {selectedNode.temperature}°C
+                </span>
+              </div>
+            )}
+
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={selectedHistory} margin={chartMargin}>
                 <defs>
@@ -91,11 +100,21 @@ const DashboardTab: React.FC = () => {
         <div className="flex-1 bg-white/80 backdrop-blur-md border border-neutral-200/60 rounded-xl p-4 shadow-xs min-h-0">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xs font-semibold tracking-wider text-neutral-800 uppercase flex items-center gap-1.5">
-              <Droplet className="w-4 h-4 text-neutral-600" /> Humidity (%) – {sensorNodes.find(n => n.id === selectedNodeId)?.name || 'Unknown'}
+              <Droplet className="w-4 h-4 text-neutral-600" /> Humidity (%) – {selectedNode?.name || 'Unknown'}
             </h3>
             <span className="text-[10px] text-neutral-400">Real-time</span>
           </div>
-          <div className="h-[calc(100%-2rem)] w-full">
+          <div className="h-[calc(100%-2rem)] w-full relative">
+            {/* Humidity stat card */}
+            {selectedNode && (
+              <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md border border-neutral-200/60 rounded-lg px-3 py-2 shadow-md flex items-center gap-1.5 z-10">
+                <Droplet className="w-3.5 h-3.5 text-neutral-500" />
+                <span className="font-mono text-sm font-bold text-neutral-800">
+                  {selectedNode.humidity}%
+                </span>
+              </div>
+            )}
+
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={selectedHistory} margin={chartMargin}>
                 <defs>
@@ -149,7 +168,7 @@ const DashboardTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Right column: 1/3 width, scrollable node list with subtle red tint for abnormal nodes */}
+      {/* Right column: 1/3 width, scrollable node list */}
       <div className="w-1/3 bg-white/80 backdrop-blur-md border border-neutral-200/60 rounded-xl p-4 shadow-xs overflow-y-auto flex flex-col min-h-0">
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-neutral-100 flex-shrink-0">
           <h2 className="text-sm font-semibold tracking-wider text-neutral-800 uppercase">NODE PREVIEW</h2>
@@ -183,7 +202,6 @@ const DashboardTab: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center">
-                  {/* Subtle status dot – soft glow, no pulse */}
                   <span
                     className={`w-3 h-3 rounded-full ${
                       node.status === 'normal'
