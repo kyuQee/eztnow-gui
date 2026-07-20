@@ -21,8 +21,9 @@ export class TelemetryService implements ITelemetryService {
   private reconnectTimer: NodeJS.Timeout | null = null;
 
   constructor() {
+    // Default settings – WebSocket URL points to mawmaw's publisher
     const defaultSettings: SystemSettings = {
-      connectionUrl: 'ws://localhost:9001',
+      connectionUrl: 'ws://localhost:9001',   // ← changed to mawmaw's port
       telemetryIntervalMs: 1000,
       autoReconnect: true,
       theme: 'light',
@@ -33,14 +34,20 @@ export class TelemetryService implements ITelemetryService {
       connectionStatus: 'connecting',
     };
 
+    // Empty streams and sensor nodes – will be populated from WebSocket data
+    const initialStreams: StreamMetric[] = [];
+    const initialSensorNodes: SensorNode[] = [];
+    const initialSensorHistory: SensorHistory = {};
+
     this.state = {
       metrics: initialMetrics,
-      streams: [],
-      sensorNodes: [],
-      sensorHistory: {},
+      streams: initialStreams,
+      sensorNodes: initialSensorNodes,
+      sensorHistory: initialSensorHistory,
       settings: defaultSettings,
     };
 
+    // Start WebSocket connection
     this.connect();
   }
 
@@ -80,110 +87,87 @@ export class TelemetryService implements ITelemetryService {
     }, 3000);
   }
 
-  /**
-   * Extract telemetry data from a WebSocket message.
-   * Supports both:
-   *   - Flat JSON: { device_id, temperature, humidity, ... }
-   *   - Mawmaw‑style: { stream, payload: "<base64>" } or { stream, payload: {...} }
-   */
   private handleMessage(data: string) {
     try {
-      const root = JSON.parse(data);
-
-      // Try to get the inner payload
-      let inner: any = root;
-
-      // If there is a 'payload' field, it may be Base64‑encoded or already an object
-      if (root.payload !== undefined) {
-        if (typeof root.payload === 'string') {
-          // Base64‑decode the string
-          try {
-            const decoded = atob(root.payload);
-            inner = JSON.parse(decoded);
-          } catch (e) {
-            console.warn('Failed to Base64‑decode or parse payload, treating as raw string', e);
-            // If it's not valid JSON, maybe it's a plain string? We'll try to parse as JSON anyway.
-            try {
-              inner = JSON.parse(root.payload);
-            } catch (_) {
-              // Give up
-              console.warn('Payload is not JSON, ignoring', root.payload);
-              return;
-            }
-          }
-        } else if (typeof root.payload === 'object') {
-          inner = root.payload;
-        } else {
-          console.warn('Unexpected payload type', root.payload);
-          return;
-        }
+      // 1. Parse the outer framework envelope sent from mawmaw publisher
+      const envelope = JSON.parse(data);
+      
+      if (!envelope || typeof envelope.payload_b64 !== 'string') {
+        console.warn('[TelemetryService] Missing or invalid payload_b64 in envelope', envelope);
+        return;
       }
 
-      // Now extract device_id, temperature, humidity from `inner`
-      const deviceId = inner.device_id;
+      // 2. Safely decode the Base64 string payload into a UTF-8 JSON text string
+      const decodedPayload = typeof Buffer !== 'undefined'
+        ? Buffer.from(envelope.payload_b64, 'base64').toString('utf8')
+        : atob(envelope.payload_b64);
+
+      // 3. Parse the actual inner ESP32 telemetric data object
+      const parsed = JSON.parse(decodedPayload);
+
+      // Expect JSON with device_id, temperature, humidity (and optional timestamp)
+      const deviceId = parsed.device_id;
       if (typeof deviceId !== 'string') {
-        console.warn('Missing or invalid device_id in message', inner);
+        console.warn('Missing or invalid device_id in inner payload', parsed);
         return;
       }
-      const temp = inner.temperature;
-      const hum = inner.humidity;
+      const temp = parsed.temperature;
+      const hum = parsed.humidity;
       if (typeof temp !== 'number' || typeof hum !== 'number') {
-        console.warn('Invalid temperature/humidity in message', inner);
+        console.warn('Invalid temperature/humidity in inner payload', parsed);
         return;
       }
+
+      // Update sensor nodes map
+      const now = new Date();
+      const timestampStr = this.formatTime(now);
+
+      // Build a new sensor node (or update existing)
+      const existingNode = this.state.sensorNodes.find(n => n.id === deviceId);
+      const isNormal = temp >= 18 && temp <= 30 && hum >= 40 && hum <= 60;
+      const status: 'normal' | 'abnormal' = isNormal ? 'normal' : 'abnormal';
+      const node: SensorNode = {
+        id: deviceId,
+        name: deviceId, // or use parsed.name if present
+        temperature: temp,
+        humidity: hum,
+        status,
+      };
+
+      // Update sensorNodes list (replace if exists, else add)
+      let updatedNodes = [...this.state.sensorNodes];
+      const idx = updatedNodes.findIndex(n => n.id === deviceId);
+      if (idx >= 0) {
+        updatedNodes[idx] = node;
+      } else {
+        updatedNodes.push(node);
+      }
+
+      // Update history for this node
+      const history = this.state.sensorHistory[deviceId] || [];
+      const newPoint: TimePoint = {
+        timestamp: timestampStr,
+        temperature: temp,
+        humidity: hum,
+      };
+      // Keep last 60 points
+      const updatedHistory = [...history, newPoint].slice(-60);
+      const newSensorHistory = {
+        ...this.state.sensorHistory,
+        [deviceId]: updatedHistory,
+      };
 
       // Update state
-      this.updateDevice(deviceId, temp, hum);
+      this.state = {
+        ...this.state,
+        sensorNodes: updatedNodes,
+        sensorHistory: newSensorHistory,
+      };
+      this.notifyListeners();
 
     } catch (e) {
-      console.error('[TelemetryService] Failed to parse WebSocket message', e);
+      console.error('[TelemetryService] Failed to parse WebSocket packet stack', e);
     }
-  }
-
-  private updateDevice(deviceId: string, temp: number, hum: number) {
-    const now = new Date();
-    const timestampStr = this.formatTime(now);
-
-    // Determine status
-    const isNormal = temp >= 18 && temp <= 30 && hum >= 40 && hum <= 60;
-    const status: 'normal' | 'abnormal' = isNormal ? 'normal' : 'abnormal';
-
-    const node: SensorNode = {
-      id: deviceId,
-      name: deviceId,
-      temperature: temp,
-      humidity: hum,
-      status,
-    };
-
-    // Update sensorNodes list
-    let updatedNodes = [...this.state.sensorNodes];
-    const idx = updatedNodes.findIndex(n => n.id === deviceId);
-    if (idx >= 0) {
-      updatedNodes[idx] = node;
-    } else {
-      updatedNodes.push(node);
-    }
-
-    // Update history for this node (keep last 60 points)
-    const history = this.state.sensorHistory[deviceId] || [];
-    const newPoint: TimePoint = {
-      timestamp: timestampStr,
-      temperature: temp,
-      humidity: hum,
-    };
-    const updatedHistory = [...history, newPoint].slice(-60);
-    const newSensorHistory = {
-      ...this.state.sensorHistory,
-      [deviceId]: updatedHistory,
-    };
-
-    this.state = {
-      ...this.state,
-      sensorNodes: updatedNodes,
-      sensorHistory: newSensorHistory,
-    };
-    this.notifyListeners();
   }
 
   private updateConnectionStatus(status: 'connected' | 'connecting' | 'disconnected') {
@@ -221,6 +205,7 @@ export class TelemetryService implements ITelemetryService {
   public updateSettings(settings: Partial<SystemSettings>): void {
     const updatedSettings = { ...this.state.settings, ...settings };
     this.state = { ...this.state, settings: updatedSettings };
+    // If connection URL changes, reconnect
     if (settings.connectionUrl && settings.connectionUrl !== this.state.settings.connectionUrl) {
       this.connect();
     }
