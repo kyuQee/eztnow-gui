@@ -1,5 +1,5 @@
 // components/DashboardTab.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTelemetry } from '../services/TelemetryContext';
 import {
   ResponsiveContainer,
@@ -17,8 +17,29 @@ const DashboardTab: React.FC = () => {
   const { sensorNodes, sensorHistory, metrics } = state;
   const [selectedNodeId, setSelectedNodeId] = useState<string>(sensorNodes[0]?.id || '');
 
-  const selectedHistory = sensorHistory[selectedNodeId] || [];
   const selectedNode = sensorNodes.find(n => n.id === selectedNodeId);
+  const rawHistory = sensorHistory[selectedNodeId] || [];
+
+  // 1) Filter to last hour
+  const oneHourAgo = useMemo(() => {
+    const now = new Date();
+    now.setHours(now.getHours() - 1);
+    return now;
+  }, []);
+
+  const filteredHistory = useMemo(() => {
+    return rawHistory.filter((entry: any) => {
+      // Assume timestamp is an ISO string or a number (milliseconds)
+      const ts = new Date(entry.timestamp);
+      return ts >= oneHourAgo;
+    });
+  }, [rawHistory, oneHourAgo]);
+
+  // 2) Format X‑axis tick as HH:MM
+  const formatTick = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   const chartMargin = { top: 10, right: 20, left: 0, bottom: 0 };
 
@@ -32,40 +53,41 @@ const DashboardTab: React.FC = () => {
             <h3 className="text-xs font-semibold tracking-wider text-neutral-800 uppercase flex items-center gap-1.5">
               <Thermometer className="w-4 h-4 text-neutral-600" /> Temperature (°C) – {selectedNode?.name || 'Unknown'}
             </h3>
-            <span className="text-[10px] text-neutral-400">Real-time</span>
+            <span className="text-[10px] text-neutral-400">Last 1 hour</span>
           </div>
           <div className="h-[calc(100%-2rem)] w-full relative">
             {/* Temperature stat card */}
             {selectedNode && (
               <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md border border-neutral-200/60 rounded-lg px-3 py-2 shadow-md flex items-center gap-1.5 z-10">
                 <Thermometer className="w-3.5 h-3.5 text-[#C7F000]" />
-                <span className="font-mono text-sm font-bold text-neutral-800">
+                <span className="font-mono text-sm font-bold text-neutral-900">
                   {selectedNode.temperature}°C
                 </span>
               </div>
             )}
 
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={selectedHistory} margin={chartMargin}>
+              <AreaChart data={filteredHistory} margin={chartMargin}>
                 <defs>
                   <linearGradient id="tempGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#C7F000" stopOpacity={0.15} />
                     <stop offset="95%" stopColor="#C7F000" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E5E5" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#D4D4D4" />
                 <XAxis
                   dataKey="timestamp"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fill: '#737373', fontSize: 9 }}
+                  tick={{ fill: '#404040', fontSize: 9 }}
                   dy={6}
                   interval="preserveStartEnd"
+                  tickFormatter={formatTick}
                 />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fill: '#404040', fontSize: 9 }}
+                  tick={{ fill: '#262626', fontSize: 9 }}
                   dx={-4}
                   domain={['dataMin - 2', 'dataMax + 2']}
                 />
@@ -102,40 +124,41 @@ const DashboardTab: React.FC = () => {
             <h3 className="text-xs font-semibold tracking-wider text-neutral-800 uppercase flex items-center gap-1.5">
               <Droplet className="w-4 h-4 text-neutral-600" /> Humidity (%) – {selectedNode?.name || 'Unknown'}
             </h3>
-            <span className="text-[10px] text-neutral-400">Real-time</span>
+            <span className="text-[10px] text-neutral-400">Last 1 hour</span>
           </div>
           <div className="h-[calc(100%-2rem)] w-full relative">
             {/* Humidity stat card */}
             {selectedNode && (
               <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md border border-neutral-200/60 rounded-lg px-3 py-2 shadow-md flex items-center gap-1.5 z-10">
-                <Droplet className="w-3.5 h-3.5 text-neutral-500" />
-                <span className="font-mono text-sm font-bold text-neutral-800">
+                <Droplet className="w-3.5 h-3.5 text-neutral-600" />
+                <span className="font-mono text-sm font-bold text-neutral-900">
                   {selectedNode.humidity}%
                 </span>
               </div>
             )}
 
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={selectedHistory} margin={chartMargin}>
+              <AreaChart data={filteredHistory} margin={chartMargin}>
                 <defs>
                   <linearGradient id="humidGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#737373" stopOpacity={0.15} />
                     <stop offset="95%" stopColor="#737373" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E5E5" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#D4D4D4" />
                 <XAxis
                   dataKey="timestamp"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fill: '#737373', fontSize: 9 }}
+                  tick={{ fill: '#404040', fontSize: 9 }}
                   dy={6}
                   interval="preserveStartEnd"
+                  tickFormatter={formatTick}
                 />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fill: '#404040', fontSize: 9 }}
+                  tick={{ fill: '#262626', fontSize: 9 }}
                   dx={-4}
                   domain={['dataMin - 5', 'dataMax + 5']}
                 />
