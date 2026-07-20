@@ -23,7 +23,7 @@ export class TelemetryService implements ITelemetryService {
   constructor() {
     // Default settings – WebSocket URL points to mawmaw's publisher
     const defaultSettings: SystemSettings = {
-      connectionUrl: 'ws://localhost:9001',   // ← changed to mawmaw's port
+      connectionUrl: 'ws://localhost:9001',
       telemetryIntervalMs: 1000,
       autoReconnect: true,
       theme: 'light',
@@ -34,7 +34,6 @@ export class TelemetryService implements ITelemetryService {
       connectionStatus: 'connecting',
     };
 
-    // Empty streams and sensor nodes – will be populated from WebSocket data
     const initialStreams: StreamMetric[] = [];
     const initialSensorNodes: SensorNode[] = [];
     const initialSensorHistory: SensorHistory = {};
@@ -47,7 +46,6 @@ export class TelemetryService implements ITelemetryService {
       settings: defaultSettings,
     };
 
-    // Start WebSocket connection
     this.connect();
   }
 
@@ -89,7 +87,6 @@ export class TelemetryService implements ITelemetryService {
 
   private handleMessage(data: string) {
     try {
-      // 1. Parse the outer framework envelope sent from mawmaw publisher
       const envelope = JSON.parse(data);
       
       if (!envelope || typeof envelope.payload_b64 !== 'string') {
@@ -97,15 +94,12 @@ export class TelemetryService implements ITelemetryService {
         return;
       }
 
-      // 2. Safely decode the Base64 string payload into a UTF-8 JSON text string
       const decodedPayload = typeof Buffer !== 'undefined'
         ? Buffer.from(envelope.payload_b64, 'base64').toString('utf8')
         : atob(envelope.payload_b64);
 
-      // 3. Parse the actual inner ESP32 telemetric data object
       const parsed = JSON.parse(decodedPayload);
 
-      // Expect JSON with device_id, temperature, humidity (and optional timestamp)
       const deviceId = parsed.device_id;
       if (typeof deviceId !== 'string') {
         console.warn('Missing or invalid device_id in inner payload', parsed);
@@ -118,23 +112,20 @@ export class TelemetryService implements ITelemetryService {
         return;
       }
 
-      // Update sensor nodes map
       const now = new Date();
       const timestampStr = this.formatTime(now);
 
-      // Build a new sensor node (or update existing)
       const existingNode = this.state.sensorNodes.find(n => n.id === deviceId);
       const isNormal = temp >= 18 && temp <= 30 && hum >= 40 && hum <= 60;
       const status: 'normal' | 'abnormal' = isNormal ? 'normal' : 'abnormal';
       const node: SensorNode = {
         id: deviceId,
-        name: deviceId, // or use parsed.name if present
+        name: deviceId,
         temperature: temp,
         humidity: hum,
         status,
       };
 
-      // Update sensorNodes list (replace if exists, else add)
       let updatedNodes = [...this.state.sensorNodes];
       const idx = updatedNodes.findIndex(n => n.id === deviceId);
       if (idx >= 0) {
@@ -150,14 +141,14 @@ export class TelemetryService implements ITelemetryService {
         temperature: temp,
         humidity: hum,
       };
-      // Keep last 60 points
-      const updatedHistory = [...history, newPoint].slice(-60);
+      
+      // Keep last 3600 points (1 second intervals * 3600 seconds = 1 hour)
+      const updatedHistory = [...history, newPoint].slice(-3600);
       const newSensorHistory = {
         ...this.state.sensorHistory,
         [deviceId]: updatedHistory,
       };
 
-      // Update state
       this.state = {
         ...this.state,
         sensorNodes: updatedNodes,
@@ -188,8 +179,6 @@ export class TelemetryService implements ITelemetryService {
     return `${hours}:${minutes}:${seconds}`;
   }
 
-  // --- ITelemetryService Methods ---
-
   public subscribe(listener: (state: TelemetryState) => void): () => void {
     this.listeners.add(listener);
     listener(this.state);
@@ -205,7 +194,6 @@ export class TelemetryService implements ITelemetryService {
   public updateSettings(settings: Partial<SystemSettings>): void {
     const updatedSettings = { ...this.state.settings, ...settings };
     this.state = { ...this.state, settings: updatedSettings };
-    // If connection URL changes, reconnect
     if (settings.connectionUrl && settings.connectionUrl !== this.state.settings.connectionUrl) {
       this.connect();
     }
